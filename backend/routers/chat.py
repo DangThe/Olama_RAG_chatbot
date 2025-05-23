@@ -1,105 +1,80 @@
-"""
-Chat router
-"""
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
-import json
-import numpy as np
+# Trong file routers/chat.py
 import requests
-from sentence_transformers import SentenceTransformer
-from config import OLLAMA_URL, OLLAMA_MODEL, EMBEDDING_MODEL
-from database import execute_query
-from utils.auth_utils import get_current_user
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi.responses import StreamingResponse
+from typing import Dict, Any, Optional
+import time
+import asyncio
+from config import OLLAMA_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT  # Import OLLAMA_TIMEOUT từ config
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
-class ChatBody(BaseModel):
-    messages: list
-
-def cosine_similarity(v1, v2):
-    """Calculate cosine similarity between two vectors"""
-    return np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2))
-
 @router.post("/ask")
-def ask_chat(body: ChatBody, current_user=Depends(get_current_user)):
-    """
-    Gửi câu hỏi cho chatbot và trả về phản hồi
-    """
-    # Lấy câu hỏi từ tin nhắn cuối cùng
-    question = body.messages[-1]['content']
-    
-    # Tạo vector embedding cho câu hỏi
+async def ask_question(request_data: Dict[str, Any]):
     try:
-        model = SentenceTransformer(EMBEDDING_MODEL)
-        question_vector = model.encode([question])[0]
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Lỗi khi tạo embedding: {str(e)}"
-        )
-    
-    # Lấy embeddings từ database
-    documents = execute_query(
-        """
-        SELECT chunk, vector 
-        FROM embeddings 
-        INNER JOIN documents ON embeddings.document_id = documents.id 
-        WHERE documents.user_id = %s OR documents.is_public = TRUE
-        """,
-        (current_user['id'],)
-    )
-    
-    if not documents:
-        # Không có tài liệu nào trong database
-        return {"reply": "Không tìm thấy tài liệu phù hợp. Vui lòng tải tài liệu lên trước khi hỏi."}
-    
-    # Tính độ tương đồng và chọn các đoạn văn có liên quan nhất
-    similarities = []
-    for doc in documents:
-        try:
-            doc_vector = json.loads(doc['vector'])
-            similarity = cosine_similarity(question_vector, doc_vector)
-            similarities.append((similarity, doc['chunk']))
-        except (json.JSONDecodeError, KeyError) as e:
-            print(f"Lỗi khi xử lý vector: {e}")
-            continue
-    
-    # Sắp xếp theo độ tương đồng và lấy top N
-    similarities.sort(reverse=True)
-    top_chunks = similarities[:3]
-    
-    if not top_chunks:
-        return {"reply": "Không thể tìm thấy thông tin liên quan trong tài liệu."}
-    
-    # Kết hợp các đoạn văn để tạo ngữ cảnh
-    context = "\n\n".join([chunk[1] for chunk in top_chunks])
-    
-    # Gửi yêu cầu đến Ollama
-    try:
-        response = requests.post(
-            f"{OLLAMA_URL}/chat",
-            json={
-                "model": OLLAMA_MODEL,
-                "messages": [
-                    {"role": "system", "content": "Dựa trên nội dung tài liệu dưới đây, hãy trả lời câu hỏi. Nếu không có thông tin liên quan, hãy thành thật nói rằng không tìm thấy thông tin."},
-                    {"role": "user", "content": f"Văn bản: {context}\n\nCâu hỏi: {question}"}
-                ],
-                "stream": False
-            },
-            timeout=30
-        )
+        question = request_data.get("question", "")
+        if not question:
+            raise HTTPException(status_code=400, detail="Question is required")
         
-        # Xử lý phản hồi
-        if response.status_code == 200:
-            data = response.json()
-            return {"reply": data.get("message", {}).get("content", "Không nhận được phản hồi")}
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Lỗi khi gọi API Ollama: {response.status_code}"
-            )
+        # Tạo payload cho Ollama
+        payload = {
+            "model": OLLAMA_MODEL,
+            "prompt": question,
+            "stream": False  # Đặt thành False để nhận toàn bộ phản hồi một lần
+        }
+        
+        # Log để debug
+        print(f"Sending request to Ollama: {OLLAMA_URL}/generate")
+        print(f"Payload: {payload}")
+        print(f"Using timeout: {OLLAMA_TIMEOUT} seconds")
+        
+        # Gọi đến Ollama API với timeout đã tăng
+        start_time = time.time()
+       if OLLAMA_URL.endswith('/api'):
+		full_url = f"{OLLAMA_URL}/generate"
+			else:
+		full_url = f"{OLLAMA_URL}/api/generate"
+
+		print(f"Fixed URL: {full_url}")
+
+		response = requests.post(
+		full_url,
+		json=payload,
+		timeout=OLLAMA_TIMEOUT
+		)
+        end_time = time.time()
+        print(f"Ollama response time: {end_time - start_time:.2f} seconds")
+        
+        # Kiểm tra phản hồi
+        if response.status_code != 200:
+            print(f"Ollama error: {response.status_code} - {response.text}")
+            raise HTTPException(status_code=500, 
+                               detail=f"Error from Ollama: {response.status_code} - {response.text}")
+        
+        # Lấy dữ liệu phản hồi
+        response_data = response.json()
+        answer = response_data.get("response", "Sorry, I couldn't generate a response.")
+        
+        return {"answer": answer}
+    
+    except requests.Timeout:
+        print("Ollama request timed out after", OLLAMA_TIMEOUT, "seconds")
+        raise HTTPException(status_code=504, 
+                           detail=f"Request to language model timed out after {OLLAMA_TIMEOUT} seconds. Try a shorter question.")
+    
+    except requests.ConnectionError as e:
+        print(f"Ollama connection error: {str(e)}")
+        raise HTTPException(status_code=503, 
+                           detail="Cannot connect to Ollama. Please ensure Ollama is running.")
+    
     except requests.RequestException as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Lỗi kết nối đến Ollama: {str(e)}"
-        )
+        print(f"Ollama request error: {str(e)}")
+        raise HTTPException(status_code=500, 
+                           detail=f"Error connecting to language model: {str(e)}")
+    
+    except Exception as e:
+        print(f"Unexpected error: {str(e)}")
+        import traceback
+        traceback.print_exc()  # In stack trace đầy đủ để debug
+        raise HTTPException(status_code=500, 
+                           detail=f"Unexpected error: {str(e)}")

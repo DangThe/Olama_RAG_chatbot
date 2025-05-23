@@ -26,7 +26,7 @@ UPLOAD_DIR = os.getenv("UPLOAD_DIR", "uploads")
 MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", 10 * 1024 * 1024))  # 10MB
 
 # Ollama Configuration
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api")
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistral")
 
 # CORS Configuration
@@ -34,3 +34,9 @@ CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 
 # Embedding Model Configuration
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+
+# Thêm vào file config.py
+# Ollama Configuration
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistral")
+OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", 120))  # Thời gian chờ đợi tối đa 120 giây

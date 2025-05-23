@@ -46,8 +46,20 @@ export const fileService = {
 };
 
 // Chat services
+// Cập nhật phần Chat Service trong apiService.js
 export const chatService = {
-  sendMessage: (messages) => api.post('/chat/ask', { messages })
+  // Gửi tin nhắn đến chatbot với timeout tùy chỉnh
+  sendMessage: async (message, timeout = 60000) => { // Mặc định 60 giây
+    try {
+      const response = await api.post('/chat/ask', { question: message }, {
+        timeout: timeout // Tăng timeout cho request này
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error sending message:', error);
+      throw error;
+    }
+  }
 };
 
 export default api;

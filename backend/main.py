@@ -21,3 +21,13 @@ app.include_router(chat.router)
 @app.get("/")
 def read_root():
     return {"message": "RAG Chatbot backend is running"}
+	
+	# Trong main.py, nếu bạn khởi động server từ mã
+if __name__ == "__main__":
+    uvicorn.run(
+        "main:app", 
+        host="0.0.0.0", 
+        port=8000, 
+        reload=True,
+        timeout_keep_alive=120  # Tăng thời gian keepalive
+    )
