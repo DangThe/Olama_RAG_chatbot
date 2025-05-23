@@ -63,3 +63,6 @@ tzdata==2025.2
 urllib3==2.4.0
 uvicorn==0.34.2
 XlsxWriter==3.2.3
+sqlalchemy>=1.4
+# HTTP Client (for calling Ollama)
+httpx>=0.24.0 # Cho cả sync và async HTTP requests

@@ -23,8 +23,8 @@ def get_db():
     return mysql.connector.connect(
         host="localhost",
         port=3300,
-        user="root",
-        password="",
+        user="chatbot",
+        password="chatbot",
         database="chatbot"
     )
 
@@ -93,3 +93,10 @@ def process_and_store(filepath, doc_id, db=None):
 
     if close_db:
         db.close()
+
+# Trả về embedding cho một đoạn văn bản
+def get_embedding(text):
+    """
+    Trích xuất embedding từ một đoạn văn bản (chuỗi) duy nhất.
+    """
+    return model.encode([text])[0].tolist()
