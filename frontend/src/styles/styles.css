@@ -12,6 +12,7 @@ body {
   background-color: #f5f5f5;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   color: var(--dark-color);
+  padding-top: 60px;
 }
 
 .page-container {
